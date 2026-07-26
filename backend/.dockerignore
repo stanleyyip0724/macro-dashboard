@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.env
+fred_cache.db
+fred_cache.db-shm
+fred_cache.db-wal
