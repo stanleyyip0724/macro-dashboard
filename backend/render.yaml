@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: macro-dashboard-api
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: FRED_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: CACHE_DB_PATH
+        value: /tmp/fred_cache.db
+      - key: LOG_LEVEL
+        value: INFO
+      - key: PYTHON_VERSION
+        value: "3.11"
