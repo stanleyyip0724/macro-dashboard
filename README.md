@@ -38,6 +38,7 @@ API docs are at <http://localhost:8000/docs>.
 | `scripts/smoke_test.py` | Full pipeline end to end: fetch → transform → classify → score → alert. |
 | `scripts/backtest.py` | Cycle classifier measured against NBER recession dates. |
 | `scripts/test_api.py` | Every HTTP route returns 200 and the expected payload shape. |
+| `scripts/test_markets.py` | Live market pipeline: prices parse, the curve is ordered and sane, sentiment is in range, every headline carries an implication, and every commentary generator fires. |
 
 ---
 
@@ -320,10 +321,67 @@ checking quarterly GDP every 15 minutes spends calls to learn nothing.
 | `GET /api/series/{id}` | Full history: raw, transformed, z-score |
 | `GET /api/health` | Coverage, missing series, cache stats |
 | `POST /api/refresh` | Manual refresh (`?force=true` bypasses both tiers) |
+| `GET /api/markets` | Everything the Markets tab renders, in one call |
+| `GET /api/markets/quotes` | Raw parsed quotes, by symbol |
+| `GET /api/markets/curve` | US Treasury curve: current, 1w, 1m and 1y vintages |
+| `GET /api/markets/fear-greed` | CNN Fear &amp; Greed score, inputs, 180-day history |
+| `GET /api/markets/news` | Headlines with transmission channel and implication |
 
 `/api/summary` is deliberately one endpoint rather than six: every widget
 derives from the same snapshot, and splitting it would let the cards disagree
 with the gauge if a refresh landed between requests.
+
+---
+
+## 4b. The markets layer
+
+The dashboard has two tabs. **US macro** is the FRED model described above,
+unchanged. **Markets** is a separate pipeline in `backend/app/markets/` that
+never touches the cycle classifier or the risk score — market prices are not
+inputs to either model, and adding them to `indicators.py` would silently
+change both.
+
+### What it shows
+
+| Panel | Content | Source |
+|---|---|---|
+| Cross-asset map | Squarified tree map: area = weight, colour and label = return over the selected horizon | Yahoo Finance |
+| Major index performance | 12 global indices + VIX, with 1D→12M returns, a YTD-vs-peers bar, and 52-week range position | Yahoo Finance |
+| YTD paths | Cumulative return since 1 January, rebased to zero so different price scales are comparable | Yahoo Finance |
+| Commodities | Gold, silver, WTI, Brent, copper, natural gas | Yahoo Finance |
+| Crypto & FX | BTC, ETH, dollar index, EUR/USD, USD/JPY, GBP/USD, USD/CNY, USD/KRW | Yahoo Finance |
+| Yield curve | 11 constant maturities, plotted today vs 1 month vs 1 year ago | FRED (`DGS*`) |
+| Fear & Greed | CNN's index, its seven inputs, and 180 days of history | CNN dataviz |
+| News | Headlines tagged with transmission channel and implication | Google News RSS |
+
+The Fear & Greed gauge replaces the composite risk gauge in the macro tab's
+verdict row — it is the faster-moving read on the same question. The risk model
+itself is unchanged and still rendered in full further down that tab.
+
+### Commentary is the product, not the prices
+
+`markets/narrative.py` turns the snapshot into sentences. The rule the module
+is built around: a level on its own carries nothing a reader can act on, so
+every figure is paired with direction, pace, and a cross-reference. Gold is read
+against the dollar; index returns against their own YTD path and their peers;
+the curve against where it sat a month ago; sentiment against what prices did
+over the same month. Divergences are called out explicitly, because that is
+where the information is — prices holding up while sentiment deteriorates is a
+different market from both rising together.
+
+The generators are deterministic and take the assembled state as an argument,
+so the wording can be reviewed and tested without a network call, and the text
+always describes the same snapshot the charts were drawn from.
+
+### Failure isolation
+
+Three of the four upstreams are public endpoints with no SLA. Each section has
+its own TTL, its own lock, and its own error record, and a failed fetch keeps
+serving the last good payload rather than raising. `/api/markets` therefore
+returns 200 with empty sections and an `errors` map instead of a 500, the UI
+renders every panel it has data for, and the macro tab is unaffected either way.
+Markets are fetched lazily on first request rather than at boot, so a Yahoo
+outage cannot make a deploy look like it failed.
 
 ---
 
@@ -340,6 +398,18 @@ with the gauge if a refresh landed between requests.
 - **Weights are judgement, not optimisation.** They're deliberately not fitted;
   with three recessions, fitting weights would overfit badly. They encode
   economic reasoning and are all in one file to make disagreement easy.
+- **Market prices come from undocumented public endpoints.** Yahoo's chart API,
+  CNN's dataviz JSON and Google News RSS are all free, keyless, and unsupported:
+  they can rate-limit, change shape, or disappear without notice. That is why
+  each is isolated behind its own cache slot with stale-on-error semantics — but
+  if you need a contractual guarantee, swap the provider functions in
+  `markets/providers.py` for a paid feed. Nothing above that layer changes.
+- **Prices are delayed and close-based.** Intraday resolution is one day; "1D"
+  is a close-to-close move using Yahoo's `chartPreviousClose`, so during a
+  session it compares the live print to the prior close.
+- **News implications are rules, not analysis.** A keyword match to a
+  transmission channel says how that kind of story has usually reached prices.
+  It is not a claim about this story, and it is not a forecast.
 - **`RSAFS` is nominal.** In a high-inflation regime it overstates real demand.
 - **The frontend has not been built or run here** — Node isn't installed in the
   environment where this was authored. The backend is fully verified; the

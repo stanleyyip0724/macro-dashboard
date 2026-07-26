@@ -480,10 +480,15 @@ COMPOSITE_MEMBERS: dict[Klass, list[Indicator]] = {
 }
 
 # Series shown on the dashboard's headline card row, in display order.
+#
+# Six, deliberately: growth, labour, two inflation gauges, and policy. The
+# spreads and model-derived series that used to sit on a second row (T10Y2Y,
+# T10Y3M, CFNAIMA3, SAHMREALTIME, BAMLH0A0HYM2, NFCI) are all still fetched,
+# scored and alerted on -- they are risk-model inputs and appear in the risk
+# breakdown. They are simply not headline cards; the curve now has its own
+# chart on the Markets tab, which reads better than two cards ever did.
 HEADLINE_IDS: tuple[str, ...] = (
-    "GDPC1", "UNRATE", "PAYEMS", "CPILFESL", "PCEPILFE",
-    "FEDFUNDS", "T10Y2Y", "T10Y3M", "CFNAIMA3", "SAHMREALTIME",
-    "BAMLH0A0HYM2", "NFCI",
+    "GDPC1", "UNRATE", "PAYEMS", "CPILFESL", "PCEPILFE", "FEDFUNDS",
 )
 
 
