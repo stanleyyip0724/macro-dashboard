@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     )
 
     fred_api_key: str
-    cache_db_path: str = str(BACKEND_ROOT / "fred_cache.db")
+    cache_db_path: str = str(BACKEND_ROOT / "fred_cache.db") if (BACKEND_ROOT / "fred_cache.db").parent.exists() else "/tmp/fred_cache.db"
     cors_origins: str = "http://localhost:3000"
     log_level: str = "INFO"
 

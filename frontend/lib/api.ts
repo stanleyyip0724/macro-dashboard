@@ -6,7 +6,7 @@ import type { Summary, SeriesDetail, IndicatorCard } from "./types";
 // backend. Never put the FRED key in a NEXT_PUBLIC_* variable -- anything with
 // that prefix is inlined into the JavaScript bundle and shipped to every user.
 export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+  process.env.NEXT_PUBLIC_API_BASE ?? "";
 
 class ApiError extends Error {
   constructor(message: string, readonly status: number) {
