@@ -98,6 +98,19 @@ class MacroService:
             if snap is not None and (time.time() - snap.built_at) < SNAPSHOT_TTL_SECONDS:
                 return snap
 
+            # Pull-through, the same way the markets service works: a stale
+            # snapshot is the trigger to re-check FRED. This is cheap because
+            # ensure_many is gated by the per-frequency TTLs -- inside the TTL
+            # it is a local SQLite read and makes no upstream call, so the
+            # network cost is paid a few times a day, not every five minutes.
+            # Without this the data only ever moved on a manual /api/refresh
+            # or a container restart.
+            try:
+                await self.refresh()
+            except Exception as exc:  # noqa: BLE001
+                # Serving slightly stale numbers beats serving none.
+                log.warning("Background refresh failed, computing from cache: %s", exc)
+
             # pandas work is CPU-bound and releases no GIL benefit here, so run
             # it in a worker thread to keep the event loop responsive.
             snap = await asyncio.to_thread(self._compute)
